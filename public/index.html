@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Endless Survivor - 2D Web Survival Game</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0d1117; color: #e6edf3; overflow: hidden; }
+    #app-wrapper { position: relative; width: 100vw; height: 100vh; }
+    #phaser-container { position: absolute; inset: 0; z-index: 1; }
+    #ui-layer { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+    .interactive { pointer-events: auto; }
+    .hidden { display: none !important; }
+
+    /* Màn hình Sảnh chờ (Lobby) */
+    #lobby-screen {
+      position: absolute; inset: 0; background: radial-gradient(circle at center, #161b22 0%, #090d16 100%);
+      display: flex; flex-direction: column; padding: 24px; gap: 20px; overflow-y: auto;
+    }
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #21262d; padding: 14px 24px; border-radius: 10px; border: 1px solid #30363d;
+    }
+    .wallet-badges { display: flex; gap: 16px; font-weight: bold; font-size: 16px; }
+    .badge-gold { color: #f1c40f; }
+    .badge-gems { color: #3498db; }
+
+    .lobby-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; flex: 1; }
+    .panel {
+      background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px;
+      display: flex; flex-direction: column; gap: 12px; overflow-y: auto;
+    }
+    .panel h3 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+
+    .upgrade-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .upg-item {
+      background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 10px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .btn {
+      padding: 8px 14px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+      background: #238636; color: #fff; transition: 0.15s;
+    }
+    .btn:hover { background: #2ea043; }
+    .btn-play {
+      padding: 16px 36px; font-size: 20px; background: #d29922; color: #000;
+      border-radius: 8px; align-self: center; box-shadow: 0 0 20px rgba(210,153,34,0.4);
+    }
+    .btn-play:hover { background: #e3b341; }
+
+    /* HUD Trong trận */
+    #hud-screen { position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; }
+    .hud-top { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 860px; margin: 0 auto; }
+    .bar-wrap { width: 100%; height: 20px; background: #21262d; border-radius: 10px; overflow: hidden; border: 1px solid #444; position: relative; }
+    .bar-fill-hp { height: 100%; background: #2ecc71; width: 100%; transition: width 0.1s; }
+    .bar-fill-exp { height: 100%; background: #3498db; width: 0%; transition: width 0.1s; }
+    .bar-boss-wrap { width: 100%; height: 30px; background: #2b1115; border-radius: 8px; overflow: hidden; border: 2px solid #f1c40f; position: relative; box-shadow: 0 0 15px rgba(241,196,15,0.5); }
+    .bar-fill-boss { height: 100%; background: linear-gradient(90deg, #c0392b, #f39c12); width: 100%; transition: width 0.1s; }
+    .bar-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; text-shadow: 1px 1px 2px #000; }
+    .hud-stats { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; background: rgba(13,17,23,0.9); padding: 8px 16px; border-radius: 8px; border: 1px solid #30363d; font-weight: bold; font-size: 14px; }
+    .event-banner { text-align: center; padding: 10px; background: rgba(231, 76, 60, 0.95); color: #fff; font-weight: bold; border-radius: 6px; border: 2px solid #f1c40f; font-size: 15px; }
+    .dev-toolbar { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .btn-dev { background: #8957e5; font-size: 12px; padding: 8px 12px; }
+
+    /* Hộp thoại Chọn 3 Thẻ Kỹ Năng & Kết quả */
+    .modal-backdrop {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.8);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: #161b22; border: 2px solid #58a6ff; border-radius: 12px; padding: 24px;
+      width: 90%; max-width: 680px; display: flex; flex-direction: column; gap: 16px; text-align: center;
+    }
+    .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .skill-card {
+      background: #21262d; border: 2px solid #30363d; border-radius: 8px; padding: 16px;
+      cursor: pointer; display: flex; flex-direction: column; gap: 8px;
+    }
+    .skill-card:hover { border-color: #f1c40f; background: #2d333b; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px; border-bottom: 1px solid #30363d; text-align: left; }
+  </style>
+</head>
+<body>
+<div id="app-wrapper">
+  <div id="phaser-container"></div>
+
+  <div id="ui-layer">
+    <!-- 1. MÀN HÌNH SẢNH CHỜ (LOBBY) -->
+    <div id="lobby-screen" class="interactive">
+      <div class="top-bar">
+        <div>
+          <h2 id="lbl-player-name">Đang tải hồ sơ...</h2>
+          <small id="lbl-player-stats">Chiến Binh (WARRIOR) | Giới hạn Cấp 300 | Phòng Boss mỗi 20 Lv</small>
+        </div>
+        <div class="wallet-badges">
+          <span class="badge-gold">Vàng: <span id="lbl-gold">0</span></span>
+          <span class="badge-gems">Gems: <span id="lbl-gems">0</span></span>
+        </div>
+      </div>
+
+      <div class="lobby-grid">
+        <div class="panel">
+          <h3>Nâng Cấp Vĩnh Viễn (15 Ô Hero Upgrades)</h3>
+          <div id="upgrade-container" class="upgrade-list"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Bảng Xếp Hạng Sinh Tồn (Chỉ tính khi Tử Trận)</h3>
+          <table>
+            <thead>
+              <tr><th>Hạng</th><th>Người chơi</th><th>Thời gian</th><th>Lv</th><th>Điểm</th></tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <button class="btn btn-play" onclick="startGameRun()">VÀO TRẬN SINH TỒN (WASD)</button>
+    </div>
+
+    <!-- 2. GIAO DIỆN HUD TRONG TRẬN -->
+    <div id="hud-screen" class="hidden">
+      <div class="hud-top">
+        <div class="hud-stats">
+          <span>Thời gian: <span id="hud-timer">00:00</span></span>
+          <span>Cấp: <span id="hud-level">1</span>/300</span>
+          <span>Khu vực: <span id="hud-room-state" style="color:#2ecc71">Bản Đồ Thường</span></span>
+          <span>Hạ gục: <span id="hud-kills">0</span></span>
+          <span style="color:#ff7b72">Điểm Final Boss: <span id="hud-fb-score">0</span></span>
+          <span style="color:#f1c40f">Vàng: <span id="hud-gold">0</span></span>
+        </div>
+        <div class="bar-wrap">
+          <div id="bar-hp" class="bar-fill-hp"></div>
+          <div id="txt-hp" class="bar-text">100 / 100 HP</div>
+        </div>
+        <div class="bar-wrap">
+          <div id="bar-exp" class="bar-fill-exp"></div>
+          <div id="txt-exp" class="bar-text">EXP: 0 / 62</div>
+        </div>
+        <!-- Thanh trạng thái Boss Phòng 20Lv / Khiên & Điểm Final Boss -->
+        <div id="boss-hp-container" class="bar-boss-wrap hidden">
+          <div id="bar-boss-hp" class="bar-fill-boss"></div>
+          <div id="txt-boss-hp" class="bar-text">BOSS: 2000 / 2000 HP</div>
+        </div>
+        <div id="event-banner" class="event-banner hidden"></div>
+      </div>
+
+      <div class="dev-toolbar interactive">
+        <button class="btn btn-dev" onclick="window.battleScene?.devJumpToNextBossLevel()">Tới Mốc 20Lv Tiếp Theo (Phòng Boss Rộng)</button>
+        <button class="btn btn-dev" onclick="window.battleScene?.devSpawnMiniBoss()">Gọi Mini-Boss (Mốc 5 Phút)</button>
+        <button class="btn btn-dev" onclick="window.battleScene?.devEnterFinalBossRoom()">Tua Phút 30 (Phòng Final Boss)</button>
+        <button class="btn btn-dev" style="background:#da3633" onclick="window.battleScene?.devForceDeath()">Tử Trận Ngay (Lưu Điểm & BXH)</button>
+      </div>
+    </div>
+
+    <!-- 3. MODAL RÚT 3 THẺ KỸ NĂNG KHI LÊN CẤP -->
+    <div id="levelup-modal" class="modal-backdrop hidden interactive">
+      <div class="modal-box">
+        <h2 style="color:#f1c40f">LÊN CẤP! CHỌN 1 TRONG 3 THẺ NÂNG CẤP</h2>
+        <div id="card-choices" class="card-grid"></div>
+      </div>
+    </div>
+
+    <!-- 4. MODAL KẾT QUẢ KHI NHÂN VẬT CHẾT -->
+    <div id="gameover-modal" class="modal-backdrop hidden interactive">
+      <div class="modal-box">
+        <h2 style="color:#e74c3c">NHÂN VẬT ĐÃ TỬ TRẬN (RUN ENDED)</h2>
+        <p id="gameover-summary"></p>
+        <button class="btn" onclick="returnToLobby()">Về Sảnh Chờ & Cập Nhật BXH</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const USER_ID = 1;
+  const HERO_ID = 1;
+  let bootstrapData = null;
+  let lobbyData = null;
+  let phaserGame = null;
+
+  // Kích thước Phòng Boss mở rộng: 2200 x 1600 px
+  const BOSS_ROOM_W = 2200;
+  const BOSS_ROOM_H = 1600;
+
+  function calcRequiredExp(level) {
+    return Math.floor((8 + 6 * level + 1.6 * Math.pow(level, 1.75)) * 4);
+  }
+
+  async function loadAllLobbyData() {
+    const [bootRes, lobRes, lbRes] = await Promise.all([
+      fetch('/api/game/bootstrap').then(r => r.json()),
+      fetch(`/api/users/${USER_ID}/lobby`).then(r => r.json()),
+      fetch('/api/leaderboard').then(r => r.json())
+    ]);
+    bootstrapData = bootRes;
+    lobbyData = lobRes;
+
+    document.getElementById('lbl-player-name').textContent =
+      `${lobRes.profile?.DisplayName || 'Chiến Binh'} (@${lobRes.profile?.Username || 'player_one'})`;
+
+    const goldObj = lobRes.wallets?.find(w => w.CurrencyType === 'GOLD');
+    const gemsObj = lobRes.wallets?.find(w => w.CurrencyType === 'GEMS');
+    document.getElementById('lbl-gold').textContent = goldObj ? goldObj.Balance : 0;
+    document.getElementById('lbl-gems').textContent = gemsObj ? gemsObj.Balance : 0;
+
+    const upgBox = document.getElementById('upgrade-container');
+    upgBox.innerHTML = '';
+    const levelMap = {};
+    (lobRes.upgrades || []).forEach(u => levelMap[u.UpgradeCode] = u.CurrentLevel);
+
+    (bootRes.upgradeConfigs || []).forEach(cfg => {
+      const curLv = levelMap[cfg.UpgradeCode] || 0;
+      const cost = Math.floor(cfg.BaseGoldCost * Math.pow(cfg.CostScale, curLv));
+      const div = document.createElement('div');
+      div.className = 'upg-item';
+      div.innerHTML = `
+        <div>
+          <strong>${cfg.UpgradeName}</strong> <small>(Lv ${curLv}/${cfg.MaxLevel})</small><br/>
+          <small style="color:#8b949e">${cfg.Description}</small>
+        </div>
+        <button class="btn" ${curLv >= cfg.MaxLevel ? 'disabled' : ''} onclick="buyUpgrade('${cfg.UpgradeCode}')">
+          ${curLv >= cfg.MaxLevel ? 'MAX' : cost + ' G'}
+        </button>
+      `;
+      upgBox.appendChild(div);
+    });
+
+    const lbBody = document.getElementById('leaderboard-body');
+    lbBody.innerHTML = lbRes.length ? '' : '<tr><td colspan="5">Chưa có kỷ lục nào</td></tr>';
+    lbRes.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>#${row.RankNumber}</td>
+        <td>${row.DisplayName}</td>
+        <td>${row.FormattedTime}</td>
+        <td>Lv.${row.LevelReached}</td>
+        <td style="color:#f1c40f;font-weight:bold">${row.BestScore}</td>
+      `;
+      lbBody.appendChild(tr);
+    });
+  }
+
+  async function buyUpgrade(code) {
+    const res = await fetch('/api/heroes/upgrade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: USER_ID, heroId: HERO_ID, upgradeCode: code, requestId: 'upg_' + Date.now() })
+    });
+    const data = await res.json();
+    if (!res.ok) alert(data.message);
+    await loadAllLobbyData();
+  }
+
+  async function startGameRun() {
+    const res = await fetch('/api/game/runs/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: USER_ID, heroId: HERO_ID, stageId: 1, gameMode: 'SOLO' })
+    });
+    const runData = await res.json();
+    if (!res.ok) return alert(runData.message);
+
+    document.getElementById('lobby-screen').classList.add('hidden');
+    document.getElementById('hud-screen').classList.remove('hidden');
+    document.getElementById('boss-hp-container').classList.add('hidden');
+
+    if (phaserGame) phaserGame.destroy(true);
+    initPhaserBattle(runData.runSnapshot, runData.validSkillPool);
+  }
+
+  function initPhaserBattle(snapshot, skillPool) {
+    class BattleScene extends Phaser.Scene {
+      constructor() { super('BattleScene'); }
+
+      create() {
+        window.battleScene = this;
+        this.snapshot = snapshot;
+        this.maxHP = snapshot.FinalMaxHP || 130;
+        this.curHP = this.maxHP;
+        this.moveSpeed = (snapshot.FinalMoveSpeed || 100) * 2.3;
+        this.damageMult = snapshot.BonusDamageMultiplier || 1.1;
+
+        this.level = 1;
+        this.lastBossMilestone = 0;
+        this.curExp = 0;
+        this.reqExp = calcRequiredExp(1);
+        this.kills = 0;
+        this.bossKills = 0;
+        this.gold = 0;
+        this.totalDamage = 0;
+        this.finalBossScore = 0;
+        this.miniBossSpawnCount = 0;     // Đếm số lần Mini-Boss đã xuất hiện để tăng độ trâu
+        this.finalBossSummonWave = 0;    // Đếm đợt triệu hồi của Final Boss ở Phút 30
+        this.elapsedSec = 0;
+        this.realStartMs = Date.now();
+        this.inBossRoom = false;
+        this.inFinalBossRoom = false;
+        this.activeBoss = null;
+        this.finalBossShield = null;
+        this.isDead = false;
+
+        // 1. Nền bản đồ rộng
+        this.arenaBg = this.add.grid(0, 0, 8000, 8000, 64, 64, 0x161b22, 1, 0x21262d, 1);
+
+        // 2. Cấu trúc Phòng Boss mở rộng (2200 x 1600 px)
+        this.bossRoomGroup = this.add.container(0, 0).setVisible(false);
+        this.bossRoomFloor = this.add.rectangle(0, 0, BOSS_ROOM_W, BOSS_ROOM_H, 0x2d0a10, 0.96).setStrokeStyle(10, 0xf1c40f);
+        this.bossRoomInnerGrid = this.add.grid(0, 0, BOSS_ROOM_W, BOSS_ROOM_H, 80, 80, 0x000000, 0, 0xffffff, 0.06);
+
+        const pillarCoords = [
+          [-950, -650], [0, -650], [950, -650],
+          [-950, 0],               [950, 0],
+          [-950, 650],  [0, 650],  [950, 650]
+        ];
+        const pillars = pillarCoords.map(([px, py]) => this.add.circle(px, py, 28, 0xf1c40f).setStrokeStyle(4, 0x000000));
+
+        this.bossRoomTitleText = this.add.text(0, -740, 'ĐẤU TRƯỜNG PHÒNG BOSS MỞ RỘNG', {
+          fontSize: '24px', color: '#f1c40f', fontStyle: 'bold'
+        }).setOrigin(0.5);
+
+        this.bossRoomGroup.add([this.bossRoomFloor, this.bossRoomInnerGrid, ...pillars, this.bossRoomTitleText]);
+
+        // 3. Tạo nhân vật chính
+        this.player = this.add.circle(0, 0, 18, 0x3498db).setStrokeStyle(3, 0xffffff);
+        this.physics.add.existing(this.player);
+        this.cameras.main.startFollow(this.player);
+
+        this.enemies = this.physics.add.group();
+        this.projectiles = this.physics.add.group();
+        this.bossProjectiles = this.physics.add.group();
+        this.expGems = this.physics.add.group();
+
+        this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT');
+
+        this.time.addEvent({ delay: 380, loop: true, callback: () => this.autoFireWeapon() });
+        this.time.addEvent({ delay: 1150, loop: true, callback: () => this.spawnNormalWave() });
+        this.time.addEvent({ delay: 2200, loop: true, callback: () => this.fireBossRadialPattern() });
+
+        this.time.addEvent({
+          delay: 1000, loop: true,
+          callback: () => {
+            if (this.isDead) return;
+            this.elapsedSec++;
+            if (this.elapsedSec % 300 === 0 && this.elapsedSec < 1800) {
+              this.devSpawnMiniBoss();
+            }
+            if (this.elapsedSec === 1800 && !this.inFinalBossRoom) {
+              this.devEnterFinalBossRoom();
+            }
+            this.updateHud();
+          }
+        });
+
+        // Va chạm đạn người chơi trúng Quái / Mini-Boss / Boss Phòng 20Lv / Final Boss
+        this.physics.add.overlap(this.projectiles, this.enemies, (proj, enemy) => {
+          proj.destroy();
+          const dmg = Math.round(65 * this.damageMult);
+
+          if (enemy.tier === 'FINAL_BOSS') {
+            const subBossCount = this.getAliveSubBossCount();
+            if (subBossCount > 0) {
+              this.spawnFloatingText(enemy.x, enemy.y - 40, 'KHIÊN BẤT TỬ (HÃY DIỆT BOSS PHỤ!)', '#a371f7');
+              return;
+            } else {
+              this.finalBossScore += dmg;
+              this.totalDamage += dmg;
+              this.spawnFloatingText(enemy.x + Phaser.Math.Between(-30, 30), enemy.y - 45, `+${dmg} ĐIỂM!`, '#f1c40f');
+              this.updateHud();
+              return;
+            }
+          }
+
+          enemy.hp -= dmg;
+          this.totalDamage += dmg;
+
+          // CƠ CHẾ PHASE 2 CUỒNG NỘ (ENRAGE) KHI BOSS PHÒNG 20LV HOẶC MINI-BOSS CÒN DƯỚI 50% MÁU
+          if ((enemy.tier === 'ROOM_BOSS' || enemy.tier === 'MINI_BOSS') && !enemy.isEnraged && enemy.hp > 0 && enemy.hp <= enemy.maxHp * 0.5) {
+            enemy.isEnraged = true;
+            enemy.speed = Math.round(enemy.speed * 1.30);
+            enemy.dmg = Math.round(enemy.dmg * 1.35);
+            enemy.setStrokeStyle(6, 0xff0000);
+            this.showBanner(`CẢNH BÁO: ${enemy.bossTitle} KÍCH HOẠT CUỒNG NỘ PHASE 2 (+30% TỐC ĐỘ, +35% SÁT THƯƠNG)!`);
+          }
+
+          // Cập nhật nhãn máu trực tiếp trên đầu các loại Boss và Elite
+          if (enemy.labelText && enemy.hp > 0) {
+            const rageTag = enemy.isEnraged ? ' [CUỒNG NỘ]' : '';
+            enemy.labelText.setText(
+              `${enemy.bossTitle}${rageTag} (${Math.ceil(enemy.hp)}/${enemy.maxHp} HP | ${enemy.dmg} ATK)`
+            );
+          }
+
+          this.updateHud();
+          if (enemy.hp <= 0) this.handleEnemyKill(enemy);
+        });
+
+        // Đạn của Boss trúng người chơi
+        this.physics.add.overlap(this.player, this.bossProjectiles, (player, bProj) => {
+          if (this.isDead) return;
+          const projDmg = bProj.dmg || 12;
+          bProj.destroy();
+          this.curHP = Math.max(0, this.curHP - projDmg);
+          this.updateHud();
+          if (this.curHP <= 0) this.devForceDeath();
+        });
+
+        // Thân Quái / Boss chạm người chơi
+        this.physics.add.overlap(this.player, this.enemies, (player, enemy) => {
+          if (this.isDead) return;
+          this.curHP = Math.max(0, this.curHP - (enemy.dmg || 10) * 0.045);
+          this.updateHud();
+          if (this.curHP <= 0) this.devForceDeath();
+        });
+
+        // Nhặt ngọc EXP
+        this.physics.add.overlap(this.player, this.expGems, (player, gem) => {
+          const expVal = gem.expValue || 30;
+          gem.destroy();
+          this.gainExp(expVal);
+        });
+
+        this.updateHud();
+      }
+
+      // Tính hệ số sức mạnh quái theo Thời gian (Phút) và Cấp độ hiện tại
+      getDifficultyFactors() {
+        const minutes = Math.floor(this.elapsedSec / 60);
+        const hpScale = (1 + 0.12 * this.level) * Math.pow(1.15, Math.min(30, minutes));
+        const dmgScale = (1 + 0.04 * this.level) * Math.pow(1.08, Math.min(30, minutes));
+        const speedBonus = Math.min(65, minutes * 1.5 + Math.floor(this.level / 12));
+        return { minutes, hpScale, dmgScale, speedBonus };
+      }
+
+      getAliveSubBossCount() {
+        return this.enemies.getChildren().filter(
+          en => en.active && en.tier !== 'FINAL_BOSS' && en.tier !== 'NORMAL' && en.tier !== 'ELITE'
+        ).length;
+      }
+
+      spawnFloatingText(x, y, message, color = '#ffffff') {
+        const txt = this.add.text(x, y, message, {
+          fontSize: '14px', color, fontStyle: 'bold', stroke: '#000000', strokeThickness: 3
+        }).setOrigin(0.5);
+        this.tweens.add({
+          targets: txt,
+          y: y - 35,
+          alpha: 0,
+          duration: 650,
+          onComplete: () => txt.destroy()
+        });
+      }
+
+      update() {
+        if (this.isDead) return;
+        const body = this.player.body;
+        body.setVelocity(0);
+
+        if (this.keys.A.isDown || this.keys.LEFT.isDown) body.setVelocityX(-this.moveSpeed);
+        else if (this.keys.D.isDown || this.keys.RIGHT.isDown) body.setVelocityX(this.moveSpeed);
+
+        if (this.keys.W.isDown || this.keys.UP.isDown) body.setVelocityY(-this.moveSpeed);
+        else if (this.keys.S.isDown || this.keys.DOWN.isDown) body.setVelocityY(this.moveSpeed);
+
+        if (body.velocity.x !== 0 || body.velocity.y !== 0) {
+          body.velocity.normalize().scale(this.moveSpeed);
+        }
+
+        const subBossAlive = this.getAliveSubBossCount() > 0;
+
+        this.enemies.getChildren().forEach(en => {
+          this.physics.moveToObject(en, this.player, en.speed || 90);
+          if (en.labelText) {
+            en.labelText.setPosition(en.x, en.y - (en.radius || 25) - 18);
+          }
+        });
+
+        if (this.inFinalBossRoom && this.activeBoss && this.activeBoss.active && this.finalBossShield) {
+          this.finalBossShield.setPosition(this.activeBoss.x, this.activeBoss.y);
+          this.finalBossShield.setVisible(subBossAlive);
+          if (subBossAlive) {
+            this.activeBoss.labelText?.setText(
+              `CHÚA TỂ HƯ KHÔNG [KHIÊN BẤT TỬ - ĐỢT TRIỆU HỒI #${this.finalBossSummonWave}]`
+            );
+            this.activeBoss.labelText?.setColor('#d2a8ff');
+          } else {
+            this.activeBoss.labelText?.setText(
+              `CHÚA TỂ HƯ KHÔNG [VỠ KHIÊN - BẮN ĐỂ GHI ĐIỂM!] (+${this.finalBossScore} ĐIỂM)`
+            );
+            this.activeBoss.labelText?.setColor('#f1c40f');
+          }
+        }
+      }
+
+      autoFireWeapon() {
+        if (this.isDead) return;
+        const list = this.enemies.getChildren().filter(en => en.active);
+        if (!list.length) return;
+
+        const subBosses = list.filter(en => en.tier !== 'FINAL_BOSS');
+        const targetPool = subBosses.length > 0 ? subBosses : list;
+
+        let nearest = targetPool[0];
+        let minDist = Phaser.Math.Distance.Between(this.player.x, this.player.y, nearest.x, nearest.y);
+        for (const en of targetPool) {
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, en.x, en.y);
+          if (d < minDist) { minDist = d; nearest = en; }
+        }
+
+        const bullet = this.add.circle(this.player.x, this.player.y, 6, 0xf1c40f);
+        this.physics.add.existing(bullet);
+        this.projectiles.add(bullet);
+        this.physics.moveToObject(bullet, nearest, 620);
+        this.time.delayedCall(1800, () => bullet.active && bullet.destroy());
+      }
+
+      // Đạn của Boss Phòng 20Lv, Mini-Boss và Final Boss mạnh hơn & dày hơn theo cấp độ
+      fireBossRadialPattern() {
+        if (this.isDead) return;
+
+        const shooters = this.enemies.getChildren().filter(
+          en => en.active && (en.tier === 'ROOM_BOSS' || en.tier === 'FINAL_BOSS' || en.tier === 'MINI_BOSS')
+        );
+        if (!shooters.length) return;
+
+        shooters.forEach(boss => {
+          const bossTierMilestone = Math.max(1, Math.floor(this.level / 20));
+          let bulletCount = 8 + Math.min(12, bossTierMilestone);
+          if (boss.isEnraged) bulletCount += 4; // Khi Cuồng nộ bắn thêm 4 tia
+          if (boss.tier === 'MINI_BOSS') bulletCount = 6 + Math.min(6, this.miniBossSpawnCount);
+
+          const bulletDmg = Math.max(12, Math.round((boss.dmg || 25) * 0.45));
+          const bulletSpeed = boss.isEnraged ? 275 : 225;
+
+          for (let i = 0; i < bulletCount; i++) {
+            const angle = (Math.PI * 2 * i) / bulletCount;
+            const orb = this.add.circle(boss.x, boss.y, 7, boss.isEnraged ? 0xff0000 : 0xff4757);
+            this.physics.add.existing(orb);
+            orb.dmg = bulletDmg;
+            this.bossProjectiles.add(orb);
+            orb.body.setVelocity(Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed);
+            this.time.delayedCall(3500, () => orb.active && orb.destroy());
+          }
+        });
+      }
+
+      // Quái thường & Quái Elite tự động mở khóa chủng loại mới và tăng chỉ số theo Thời gian + Cấp độ
+      spawnNormalWave() {
+        if (this.isDead || this.inBossRoom || this.inFinalBossRoom || this.enemies.countActive() >= 150) return;
+
+        const { minutes, hpScale, dmgScale, speedBonus } = this.getDifficultyFactors();
+        const spawnCount = Math.min(8, 3 + Math.floor(minutes / 5) + Math.floor(this.level / 40));
+
+        // 4 Chủng loại quái mở khóa dần theo Cấp độ và Thời gian
+        const mobArchetypes = [
+          { name: 'Slime Xanh',       color: 0x2ecc71, radius: 13, baseHp: 45,  baseDmg: 10, baseSpeed: 90,  minLv: 1 },
+          { name: 'Xương Cầm Kiếm',   color: 0x58a6ff, radius: 15, baseHp: 75,  baseDmg: 15, baseSpeed: 102, minLv: 10 },
+          { name: 'Xương Bắn Cung',   color: 0xf39c12, radius: 16, baseHp: 110, baseDmg: 20, baseSpeed: 108, minLv: 25 },
+          { name: 'Vua Slime (Elite)',color: 0xe84393, radius: 22, baseHp: 260, baseDmg: 30, baseSpeed: 98,  minLv: 45, isElite: true }
+        ];
+
+        const unlockedPool = mobArchetypes.filter(m => this.level >= m.minLv || minutes >= Math.floor(m.minLv / 4));
+
+        for (let i = 0; i < spawnCount; i++) {
+          // Tỷ lệ 15% ra Elite nếu đã mở khóa, còn lại chọn quái cấp cao nhất đã mở
+          let tpl = unlockedPool[unlockedPool.length - 1];
+          if (tpl.isElite && Math.random() > 0.18 && unlockedPool.length > 1) {
+            tpl = unlockedPool[unlockedPool.length - 2];
+          }
+
+          const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+          const x = this.player.x + Math.cos(angle) * 430;
+          const y = this.player.y + Math.sin(angle) * 430;
+
+          const mob = this.add.circle(x, y, tpl.radius, tpl.color);
+          if (tpl.isElite) mob.setStrokeStyle(3, 0xffffff);
+          this.physics.add.existing(mob);
+
+          mob.hp = Math.round(tpl.baseHp * hpScale);
+          mob.maxHp = mob.hp;
+          mob.dmg = Math.round(tpl.baseDmg * dmgScale);
+          mob.speed = tpl.baseSpeed + speedBonus;
+          mob.radius = tpl.radius;
+          mob.tier = tpl.isElite ? 'ELITE' : 'NORMAL';
+
+          if (tpl.isElite) {
+            mob.bossTitle = `${tpl.name}`;
+            mob.labelText = this.add.text(x, y - tpl.radius - 14, `${tpl.name} (${mob.hp} HP)`, {
+              fontSize: '11px', color: '#ff9ff3', fontStyle: 'bold'
+            }).setOrigin(0.5);
+          }
+
+          this.enemies.add(mob);
+        }
+      }
+
+      // MỐC 5 PHÚT: MINI-BOSS MẠNH LŨY TIẾN THEO SỐ LẦN XUẤT HIỆN (k) VÀ CẤP ĐỘ (L)
+      devSpawnMiniBoss() {
+        this.miniBossSpawnCount++;
+        const k = this.miniBossSpawnCount;
+
+        const names = ['Kỵ Sĩ Tử Thần', 'Tư Tế Hắc Ám', 'Quỷ Đá Cổ Đại'];
+        const chosenName = names[(k - 1) % names.length];
+
+        const scaledHp = Math.floor((750 + this.level * 40) * Math.pow(1.45, k - 1));
+        const scaledDmg = Math.floor((24 + this.level * 0.8) * Math.pow(1.25, k - 1));
+        const scaledSpeed = Math.min(165, 110 + k * 6);
+        const scaledRadius = Math.min(36, 25 + k);
+
+        this.showBanner(
+          `MINI-BOSS ĐỢT #${k} [${chosenName.toUpperCase()}] XUẤT HIỆN: ${scaledHp} HP | ${scaledDmg} ATK!`
+        );
+
+        const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+        const x = this.player.x + Math.cos(angle) * 280;
+        const y = this.player.y + Math.sin(angle) * 280;
+        const mini = this.add.circle(x, y, scaledRadius, 0x9b59b6).setStrokeStyle(3, 0xffffff);
+        this.physics.add.existing(mini);
+        if (this.inBossRoom || this.inFinalBossRoom) mini.body.setCollideWorldBounds(true);
+
+        mini.hp = scaledHp;
+        mini.maxHp = scaledHp;
+        mini.dmg = scaledDmg;
+        mini.speed = scaledSpeed;
+        mini.radius = scaledRadius;
+        mini.tier = 'MINI_BOSS';
+        mini.bossTitle = `[Mini-Boss #${k}] ${chosenName}`;
+        mini.labelText = this.add.text(
+          x,
+          y - scaledRadius - 16,
+          `${mini.bossTitle} (${scaledHp}/${scaledHp} HP | ${scaledDmg} ATK)`,
+          { fontSize: '13px', color: '#e0aaff', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 4, y: 2 } }
+        ).setOrigin(0.5);
+        this.enemies.add(mini);
+      }
+
+      // MỖI 20 LEVEL (20, 40, 60... 300): BOSS PHÒNG MẠNH THEO BẬC B = L/20 & CÓ PHASE 2 CUỒNG NỘ
+      enterBossRoom20Lv(milestoneLevel) {
+        if (this.inFinalBossRoom) return;
+        const roomLv = milestoneLevel || this.level;
+        const bossTierB = Math.max(1, Math.floor(roomLv / 20)); // Bậc 1 (Lv20) -> Bậc 15 (Lv300)
+
+        document.getElementById('levelup-modal').classList.add('hidden');
+        if (this.scene.isPaused()) this.scene.resume();
+
+        this.inBossRoom = true;
+
+        this.enemies.getChildren().slice().forEach(en => {
+          if (en.tier === 'NORMAL' || en.tier === 'ELITE' || en.tier === 'ROOM_BOSS') {
+            if (en.labelText) en.labelText.destroy();
+            en.destroy();
+          }
+        });
+
+        this.player.setPosition(0, 300);
+        this.physics.world.setBounds(-BOSS_ROOM_W / 2, -BOSS_ROOM_H / 2, BOSS_ROOM_W, BOSS_ROOM_H);
+        this.player.body.setCollideWorldBounds(true);
+
+        // Công thức tăng tiến Boss Phòng theo Bậc B (1 -> 15)
+        const scaledBossHp = Math.floor(1600 * Math.pow(1.38, bossTierB - 1) + roomLv * 50);
+        const scaledBossDmg = Math.floor(32 * Math.pow(1.22, bossTierB - 1));
+        const scaledBossSpeed = Math.min(170, 105 + bossTierB * 4);
+        const scaledRadius = Math.min(62, 42 + bossTierB);
+
+        this.bossRoomFloor.setFillStyle(0x2d0a10, 0.96).setStrokeStyle(10, 0xf1c40f);
+        this.bossRoomTitleText.setText(
+          `PHÒNG BOSS BẬC #${bossTierB} (CẤP ${roomLv}) — ${scaledBossHp} HP | ${scaledBossDmg} ATK`
+        );
+        this.bossRoomGroup.setPosition(0, 0).setVisible(true);
+
+        document.getElementById('hud-room-state').textContent = `PHÒNG BOSS BẬC #${bossTierB} (LV.${roomLv})`;
+        document.getElementById('hud-room-state').style.color = '#f1c40f';
+        this.showBanner(
+          `PHÒNG BOSS CẤP ${roomLv} (BẬC #${bossTierB}): MÁU ${scaledBossHp} HP | SÁT THƯƠNG ${scaledBossDmg} ATK!`
+        );
+
+        const boss = this.add.circle(0, -250, scaledRadius, 0xe67e22).setStrokeStyle(5, 0xf1c40f);
+        this.physics.add.existing(boss);
+        boss.body.setCollideWorldBounds(true);
+        boss.hp = scaledBossHp;
+        boss.maxHp = scaledBossHp;
+        boss.dmg = scaledBossDmg;
+        boss.speed = scaledBossSpeed;
+        boss.radius = scaledRadius;
+        boss.bossTierB = bossTierB;
+        boss.tier = 'ROOM_BOSS';
+        boss.bossTitle = `[Bậc #${bossTierB} - Lv.${roomLv}] Thần Gặt Huyết Ngục`;
+        boss.labelText = this.add.text(
+          0,
+          -250 - scaledRadius - 18,
+          `${boss.bossTitle} (${scaledBossHp}/${scaledBossHp} HP | ${scaledBossDmg} ATK)`,
+          { fontSize: '15px', color: '#f1c40f', fontStyle: 'bold', backgroundColor: '#000000cc', padding: { x: 6, y: 3 } }
+        ).setOrigin(0.5);
+
+        this.activeBoss = boss;
+        this.enemies.add(boss);
+        this.updateHud();
+      }
+
+      // TRIỆU HỒI BOSS HỘ VỆ LŨY TIẾN Ở PHÚT 30
+      summonSubBossWave() {
+        if (this.isDead || !this.inFinalBossRoom) return;
+
+        this.finalBossSummonWave++;
+        const w = this.finalBossSummonWave;
+
+        // Cộng hưởng cả Cấp độ người chơi lẫn Đợt triệu hồi w
+        const baseLevelScale = 1 + this.level * 0.05;
+        const hpMult = Math.pow(1.35, w - 1) * baseLevelScale;
+        const dmgMult = Math.pow(1.20, w - 1) * (1 + this.level * 0.02);
+        const speedBonus = Math.min(55, (w - 1) * 4);
+        const radiusBonus = Math.min(14, (w - 1) * 2);
+
+        const count = Math.min(5, 2 + Math.floor((w - 1) / 2));
+
+        const bossPool = [
+          { name: 'Lãnh Chúa Xương Khô', color: 0xe67e22, baseHp: 600, baseDmg: 28 },
+          { name: 'Thần Gặt Huyết Ngục', color: 0xd35400, baseHp: 680, baseDmg: 32 },
+          { name: 'Kỵ Sĩ Tử Thần',       color: 0x9b59b6, baseHp: 540, baseDmg: 26 }
+        ];
+
+        for (let i = 0; i < count; i++) {
+          const tpl = bossPool[(w + i) % bossPool.length];
+          const scaledHp = Math.floor(tpl.baseHp * hpMult);
+          const scaledDmg = Math.floor(tpl.baseDmg * dmgMult);
+          const scaledRadius = 30 + radiusBonus;
+
+          const angle = (Math.PI * 2 * i) / count + Phaser.Math.FloatBetween(-0.3, 0.3);
+          const sx = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * 360, -920, 920);
+          const sy = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * 360, -660, 660);
+
+          const summoned = this.add.circle(sx, sy, scaledRadius, tpl.color).setStrokeStyle(4, 0xf1c40f);
+          this.physics.add.existing(summoned);
+          summoned.body.setCollideWorldBounds(true);
+          summoned.hp = scaledHp;
+          summoned.maxHp = scaledHp;
+          summoned.dmg = scaledDmg;
+          summoned.speed = 112 + speedBonus;
+          summoned.radius = scaledRadius;
+          summoned.waveNum = w;
+          summoned.bossTitle = `[Đợt ${w}] ${tpl.name}`;
+          summoned.tier = 'SUMMONED_BOSS';
+          summoned.labelText = this.add.text(
+            sx,
+            sy - scaledRadius - 18,
+            `${summoned.bossTitle} (${scaledHp}/${scaledHp} HP | ${scaledDmg} ATK)`,
+            { fontSize: '13px', color: '#f1c40f', fontStyle: 'bold', backgroundColor: '#000000bb', padding: { x: 5, y: 2 } }
+          ).setOrigin(0.5);
+
+          this.enemies.add(summoned);
+        }
+
+        const hpPctText = Math.round(hpMult * 100);
+        const dmgPctText = Math.round(dmgMult * 100);
+        this.showBanner(
+          `ĐỢT TRIỆU HỒI #${w}: ${count} BOSS HỘ VỆ XUẤT HIỆN (MÁU ${hpPctText}% | SÁT THƯƠNG ${dmgPctText}%)!`
+        );
+        this.updateHud();
+      }
+
+      devEnterFinalBossRoom() {
+        if (this.inFinalBossRoom) {
+          this.summonSubBossWave();
+          return;
+        }
+
+        document.getElementById('levelup-modal').classList.add('hidden');
+        if (this.scene.isPaused()) this.scene.resume();
+
+        this.inFinalBossRoom = true;
+        this.inBossRoom = false;
+        if (this.elapsedSec < 1800) this.elapsedSec = 1800;
+
+        this.enemies.getChildren().slice().forEach(en => {
+          if (en.labelText) en.labelText.destroy();
+          en.destroy();
+        });
+
+        this.player.setPosition(0, 320);
+        this.physics.world.setBounds(-BOSS_ROOM_W / 2, -BOSS_ROOM_H / 2, BOSS_ROOM_W, BOSS_ROOM_H);
+        this.player.body.setCollideWorldBounds(true);
+
+        this.bossRoomFloor.setFillStyle(0x160526, 0.96).setStrokeStyle(10, 0xe74c3c);
+        this.bossRoomTitleText.setText('ĐẤU TRƯỜNG FINAL BOSS (2200x1600) - MỖI ĐỢT BOSS TRIỆU HỒI SẼ TRÂU & MẠNH HƠN!');
+        this.bossRoomGroup.setPosition(0, 0).setVisible(true);
+
+        document.getElementById('hud-room-state').textContent = 'PHÒNG FINAL BOSS (PHÚT 30+)';
+        document.getElementById('hud-room-state').style.color = '#e74c3c';
+
+        const finalBoss = this.add.circle(0, -220, 56, 0xe74c3c).setStrokeStyle(5, 0xffffff);
+        this.physics.add.existing(finalBoss);
+        finalBoss.body.setCollideWorldBounds(true);
+        finalBoss.hp = 999999;
+        finalBoss.maxHp = 999999;
+        finalBoss.dmg = 45 + Math.floor(this.level * 0.5);
+        finalBoss.speed = 95;
+        finalBoss.radius = 56;
+        finalBoss.tier = 'FINAL_BOSS';
+        finalBoss.bossTitle = 'CHÚA TỂ HƯ KHÔNG (FINAL BOSS BẤT TỬ)';
+        finalBoss.labelText = this.add.text(0, -295, finalBoss.bossTitle, {
+          fontSize: '15px', color: '#d2a8ff', fontStyle: 'bold', backgroundColor: '#000000cc', padding: { x: 8, y: 4 }
+        }).setOrigin(0.5);
+
+        this.finalBossShield = this.add.circle(0, -220, 78, 0x8e44ad, 0.28).setStrokeStyle(4, 0xd2a8ff);
+
+        this.activeBoss = finalBoss;
+        this.enemies.add(finalBoss);
+
+        this.summonSubBossWave();
+
+        this.time.addEvent({
+          delay: 16000, loop: true,
+          callback: () => {
+            if (!this.isDead && this.inFinalBossRoom) {
+              this.summonSubBossWave();
+            }
+          }
+        });
+
+        this.updateHud();
+      }
+
+      handleEnemyKill(enemy) {
+        const { x, y, tier, waveNum, bossTierB } = enemy;
+        if (enemy.labelText) enemy.labelText.destroy();
+        enemy.destroy();
+        this.kills++;
+
+        const rewardBonus = (waveNum || bossTierB || 0) * 60;
+        this.gold += tier === 'NORMAL' ? 5 : (tier === 'ELITE' ? 35 : 200 + rewardBonus);
+
+        if (tier !== 'NORMAL' && tier !== 'ELITE') {
+          this.bossKills++;
+
+          if (tier === 'ROOM_BOSS') {
+            this.inBossRoom = false;
+            this.activeBoss = null;
+            this.player.body.setCollideWorldBounds(false);
+            this.bossRoomGroup.setVisible(false);
+            document.getElementById('hud-room-state').textContent = 'Bản Đồ Thường';
+            document.getElementById('hud-room-state').style.color = '#2ecc71';
+            this.showBanner(`ĐÃ HẠ BOSS PHÒNG BẬC #${bossTierB || 1}! NHẬN +${200 + rewardBonus} VÀNG & QUAY LẠI BẢN ĐỒ!`);
+          }
+
+          if (this.inFinalBossRoom && this.getAliveSubBossCount() === 0) {
+            this.showBanner('ĐÃ QUÉT SẠCH BOSS HỘ VỆ! KHIÊN FINAL BOSS ĐÃ MỞ - BẮN FINAL BOSS ĐỂ GHI ĐIỂM!');
+          }
+        }
+
+        // Ngọc EXP rơi ra cũng nhiều kinh nghiệm hơn ở cấp độ cao để người chơi kịp lên cấp 300
+        const gem = this.add.circle(x, y, tier === 'NORMAL' ? 6 : 9, tier === 'NORMAL' ? 0x00e5ff : 0xf1c40f);
+        this.physics.add.existing(gem);
+        const expScale = 1 + this.level * 0.18;
+        gem.expValue = Math.round((tier === 'NORMAL' ? 35 : (tier === 'ELITE' ? 120 : 380)) * expScale);
+        this.expGems.add(gem);
+        this.updateHud();
+      }
+
+      gainExp(amount) {
+        if (this.level >= 300) {
+          this.gold += 10;
+          return this.updateHud();
+        }
+        this.curExp += amount;
+        let leveledUpNormal = false;
+
+        while (this.curExp >= this.reqExp && this.level < 300) {
+          this.curExp -= this.reqExp;
+          this.level++;
+          this.reqExp = calcRequiredExp(this.level);
+
+          const milestone = Math.floor(this.level / 20);
+          if (milestone > this.lastBossMilestone && !this.inFinalBossRoom) {
+            this.lastBossMilestone = milestone;
+            this.curExp = 0;
+            this.enterBossRoom20Lv(milestone * 20);
+            this.updateHud();
+            return;
+          } else {
+            leveledUpNormal = true;
+          }
+        }
+
+        if (leveledUpNormal && !this.inBossRoom && !this.inFinalBossRoom) {
+          this.openCardModal();
+        }
+        this.updateHud();
+      }
+
+      devJumpToNextBossLevel() {
+        const nextMilestone = Math.min(15, Math.floor(this.level / 20) + 1);
+        this.lastBossMilestone = nextMilestone;
+        this.level = nextMilestone * 20;
+        this.curExp = 0;
+        this.reqExp = calcRequiredExp(this.level);
+        this.enterBossRoom20Lv(this.level);
+        this.updateHud();
+      }
+
+      devJumpLevels() {
+        this.devJumpToNextBossLevel();
+      }
+
+      openCardModal() {
+        this.scene.pause();
+        const modal = document.getElementById('levelup-modal');
+        const box = document.getElementById('card-choices');
+        box.innerHTML = '';
+        modal.classList.remove('hidden');
+
+        const options = [
+          { title: 'Cường Hóa Sát Thương', desc: '+25% Sát thương kỹ năng', act: () => this.damageMult += 0.25 },
+          { title: 'Hồi Phục & Tăng Máu', desc: '+20 Máu tối đa & Hồi 50% HP', act: () => { this.maxHP += 20; this.curHP = Math.min(this.maxHP, this.curHP + this.maxHP * 0.5); } },
+          { title: 'Tăng Tốc Hành Quân', desc: '+15% Tốc độ di chuyển', act: () => this.moveSpeed *= 1.15 }
+        ];
+
+        options.forEach(opt => {
+          const card = document.createElement('div');
+          card.className = 'skill-card';
+          card.innerHTML = `<h3 style="color:#58a6ff">${opt.title}</h3><p>${opt.desc}</p>`;
+          card.onclick = () => {
+            opt.act();
+            modal.classList.add('hidden');
+            this.scene.resume();
+            this.updateHud();
+          };
+          box.appendChild(card);
+        });
+      }
+
+      showBanner(msg) {
+        const b = document.getElementById('event-banner');
+        b.textContent = msg;
+        b.classList.remove('hidden');
+        clearTimeout(this.bannerTimer);
+        this.bannerTimer = setTimeout(() => b.classList.add('hidden'), 5000);
+      }
+
+      updateHud() {
+        const m = String(Math.floor(this.elapsedSec / 60)).padStart(2, '0');
+        const s = String(this.elapsedSec % 60).padStart(2, '0');
+        const { hpScale } = this.getDifficultyFactors();
+
+        document.getElementById('hud-timer').textContent = `${m}:${s} (Độ khó x${hpScale.toFixed(1)})`;
+        document.getElementById('hud-level').textContent = this.level;
+        document.getElementById('hud-kills').textContent = this.kills;
+        document.getElementById('hud-fb-score').textContent = this.finalBossScore;
+        document.getElementById('hud-gold').textContent = this.gold;
+
+        const hpPct = Math.max(0, (this.curHP / this.maxHP) * 100);
+        document.getElementById('bar-hp').style.width = `${hpPct}%`;
+        document.getElementById('txt-hp').textContent = `${Math.ceil(this.curHP)} / ${this.maxHP} HP`;
+
+        const expPct = Math.min(100, (this.curExp / this.reqExp) * 100);
+        document.getElementById('bar-exp').style.width = `${expPct}%`;
+        document.getElementById('txt-exp').textContent = `EXP: ${this.curExp} / ${this.reqExp}`;
+
+        const bossBox = document.getElementById('boss-hp-container');
+        const bossBar = document.getElementById('bar-boss-hp');
+        const bossTxt = document.getElementById('txt-boss-hp');
+
+        if (this.inFinalBossRoom && this.activeBoss && this.activeBoss.active) {
+          bossBox.classList.remove('hidden');
+          const subCount = this.getAliveSubBossCount();
+          bossBar.style.width = '100%';
+          if (subCount > 0) {
+            bossBar.style.background = 'linear-gradient(90deg, #6e40c9, #8957e5)';
+            bossTxt.textContent =
+              `FINAL BOSS [ĐỢT #${this.finalBossSummonWave} - CÒN ${subCount} BOSS PHỤ] | ĐIỂM ĐÃ GHI: +${this.finalBossScore}`;
+          } else {
+            bossBar.style.background = 'linear-gradient(90deg, #d29922, #e74c3c)';
+            bossTxt.textContent =
+              `FINAL BOSS [MỞ KHIÊN - BẮN ĐỂ CỘNG ĐIỂM!] | ĐỢT TIẾP THEO SẼ MẠNH HƠN | ĐIỂM: +${this.finalBossScore}`;
+          }
+        } else if (this.activeBoss && this.activeBoss.active && this.activeBoss.hp > 0) {
+          bossBox.classList.remove('hidden');
+          bossBar.style.background = this.activeBoss.isEnraged
+            ? 'linear-gradient(90deg, #ff0000, #ff7b72)'
+            : 'linear-gradient(90deg, #c0392b, #f39c12)';
+          const bPct = Math.max(0, (this.activeBoss.hp / this.activeBoss.maxHp) * 100);
+          bossBar.style.width = `${bPct}%`;
+          const rageTag = this.activeBoss.isEnraged ? ' [CUỒNG NỘ PHASE 2]' : '';
+          bossTxt.textContent =
+            `${this.activeBoss.bossTitle}${rageTag}: ${Math.ceil(this.activeBoss.hp)} / ${this.activeBoss.maxHp} HP (${this.activeBoss.dmg} ATK)`;
+        } else {
+          bossBox.classList.add('hidden');
+        }
+      }
+
+      async devForceDeath() {
+        if (this.isDead) return;
+        this.isDead = true;
+        this.scene.pause();
+
+        const realSec = Math.max(1, Math.floor((Date.now() - this.realStartMs) / 1000));
+        const res = await fetch('/api/game/runs/finish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            runId: Number(this.snapshot.RunId),
+            userId: USER_ID,
+            requestId: `fin_${this.snapshot.RunId}_${Date.now()}`,
+            endState: 'DEAD',
+            survivalTimeSec: realSec,
+            wavesCleared: Math.max(1, Math.floor(this.level / 5) + this.finalBossSummonWave),
+            levelReached: this.level,
+            totalKills: this.kills,
+            bossesKilled: this.bossKills,
+            totalDamageDealt: this.totalDamage,
+            goldEarned: this.gold + 150,
+            skills: [{ skillId: 1, finalLevel: 5, isEvolved: true, damageDealt: this.totalDamage, dps: 120 }],
+            passives: [{ passiveId: 1, finalLevel: 5 }]
+          })
+        });
+        const result = await res.json();
+
+        document.getElementById('gameover-summary').innerHTML =
+          `Mã trận: <b>#${result.RunId}</b> | Cấp đạt được: <b>Lv.${this.level}</b> | Đợt Final Boss: <b>#${this.finalBossSummonWave}</b><br/>` +
+          `Điểm Sát Thương Final Boss: <b style="color:#ff7b72">+${this.finalBossScore}</b> | Tổng Điểm: <b style="color:#f1c40f;font-size:18px">${result.FinalScore}</b><br/>` +
+          `Vàng nhận được: <b>+${result.GoldAdded} GOLD</b> | Kỷ lục mới BXH: <b>${result.IsNewRecord ? 'CÓ (TOP BXH)' : 'KHÔNG'}</b>`;
+        document.getElementById('gameover-modal').classList.remove('hidden');
+      }
+    }
+
+    phaserGame = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: 'phaser-container',
+      width: window.innerWidth,
+      height: window.innerHeight,
+      physics: { default: 'arcade', arcade: { debug: false } },
+      scene: [BattleScene]
+    });
+  }
+
+  async function returnToLobby() {
+    document.getElementById('gameover-modal').classList.add('hidden');
+    document.getElementById('hud-screen').classList.add('hidden');
+    document.getElementById('lobby-screen').classList.remove('hidden');
+    await loadAllLobbyData();
+  }
+
+  loadAllLobbyData();
+</script>
+</body>
+</html>
